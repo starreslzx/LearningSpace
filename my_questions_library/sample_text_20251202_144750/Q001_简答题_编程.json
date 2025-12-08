@@ -1,0 +1,13 @@
+{
+  "type": "简答题",
+  "category": "编程",
+  "question": "什么是Python？简述其特点。",
+  "answer": "Python是一种高级编程语言，具有简洁易读、跨平台、丰富的库支持等特点。",
+  "difficulty": 2,
+  "_metadata": {
+    "source_file": "sample_text",
+    "extraction_time": "2025-12-02T14:47:51.093036",
+    "question_id": "Q001",
+    "file_path": "my_questions_library\\sample_text_20251202_144750\\Q001_简答题_编程.json"
+  }
+}

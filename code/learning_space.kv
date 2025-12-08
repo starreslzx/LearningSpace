@@ -1,0 +1,411 @@
+#:kivy 2.0.0
+#:import Factory kivy.factory.Factory
+#:import DraggableTaskItem components.DraggableTaskItem
+#:import QuickQuestionCard components.QuickQuestionCard
+#:import ChatBubble components.ChatBubble
+#:import TaskDetailPopup components.TaskDetailPopup
+#:import PathBreadcrumb components.PathBreadcrumb
+#:import CategoryCard components.CategoryCard
+#:import QuestionCard components.QuestionCard
+
+<BaseLabel@Label>:
+    font_name: 'SimHei'
+
+<MainScreen>:
+    name: 'main'
+
+    BoxLayout:
+        orientation: 'vertical'
+        padding: '20dp'
+        spacing: '20dp'
+
+        canvas.before:
+            Color:
+                rgba: 0.95, 0.97, 1, 1
+            Rectangle:
+                pos: self.pos
+                size: self.size
+
+        Label:
+            text: '学习空间'
+            font_size: '32sp'
+            color: 0.2, 0.3, 0.6, 1
+            size_hint_y: 0.2
+            bold: True
+
+        GridLayout:
+            cols: 2
+            spacing: '15dp'
+            padding: '20dp'
+            size_hint_y: 0.8
+
+            Button:
+                text: '待办事项'
+                font_size: '20sp'
+                background_color: 0.3, 0.6, 0.9, 1
+                on_press: app.root.current = 'todo'
+
+            Button:
+                text: '开始专注'
+                font_size: '20sp'
+                background_color: 0.4, 0.7, 0.4, 1
+                on_press: app.root.current = 'focus'
+
+            Button:
+                text: '题目作坊'
+                font_size: '20sp'
+                background_color: 0.9, 0.7, 0.3, 1
+                on_press: app.root.current = 'workshop'
+
+            Button:
+                text: '快速闪卡'
+                font_size: '20sp'
+                background_color: 0.8, 0.5, 0.8, 1
+                on_press: root.show_quick_quiz()
+
+<DraggableTaskItem>:
+    orientation: 'horizontal'
+    size_hint_y: None
+    height: '60dp'
+    padding: '10dp'
+    spacing: '5dp'
+
+    canvas.before:
+        Color:
+            rgba: 0.95, 0.95, 0.95, 1
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [10,]
+
+    Label:
+        text: ""
+        size_hint_x: 0.08
+        color: 0.5, 0.5, 0.5, 1
+        font_size: '16sp'
+
+    CheckBox:
+        size_hint_x: 0.08
+        active: root.is_completed
+        on_active: root.on_checkbox_active(self, self.active)
+
+    BoxLayout:
+        orientation: 'vertical'
+        size_hint_x: 0.46
+        spacing: 2
+
+        Label:
+            text: root.task_text
+            text_size: self.width, None
+            color: 0.2, 0.2, 0.2, 1
+            size_hint_y: 0.7
+
+        Label:
+            text: root.task_description if root.task_description else "无描述"
+            text_size: self.width, None
+            color: 0.5, 0.5, 0.5, 1
+            font_size: '12sp'
+            size_hint_y: 0.3
+
+    BoxLayout:
+        size_hint_x: 0.38
+        orientation: 'horizontal'
+        spacing: '2dp'
+
+        Button:
+            text: '↑'
+            font_size: '12sp'
+            size_hint_x: 0.25
+            background_color: 0.3, 0.7, 0.3, 1
+            on_press: root.move_up()
+
+        Button:
+            text: '↓'
+            font_size: '12sp'
+            size_hint_x: 0.25
+            background_color: 0.3, 0.7, 0.3, 1
+            on_press: root.move_down()
+
+        Button:
+            text: 'x'
+            font_size: '12sp'
+            size_hint_x: 0.25
+            background_color: 0.8, 0.3, 0.3, 1
+            on_press: root.delete_task()
+
+        Button:
+            text: '...'
+            font_size: '12sp'
+            size_hint_x: 0.25
+            background_color: 0.3, 0.5, 0.8, 1
+            on_press: root.edit_task()
+
+<TodoScreen>:
+    name: 'todo'
+
+    FloatLayout:
+        canvas.before:
+            Color:
+                rgba: 0.95, 0.97, 1, 1
+            Rectangle:
+                pos: self.pos
+                size: self.size
+
+        BoxLayout:
+            orientation: 'vertical'
+            padding: '10dp'
+            spacing: '10dp'
+            size_hint: 1, 0.9
+
+            Label:
+                text: '待办事项'
+                font_size: '24sp'
+                color: 0.2, 0.3, 0.6, 1
+                size_hint_y: 0.1
+                bold: True
+
+            BoxLayout:
+                orientation: 'horizontal'
+                size_hint_y: 0.1
+                spacing: '10dp'
+
+                Button:
+                    id: add_button
+                    text: '+'
+                    font_size: '24sp'
+                    size_hint_x: 0.2
+                    background_color: 0.3, 0.6, 0.9, 1
+                    on_press: root.show_add_task_popup()
+
+                Label:
+                    text: '点击加号添加新任务'
+                    color: 0.5, 0.5, 0.5, 1
+                    size_hint_x: 0.8
+
+            ScrollView:
+                size_hint_y: 0.7
+
+                BoxLayout:
+                    id: task_list
+                    orientation: 'vertical'
+                    size_hint_y: None
+                    height: self.minimum_height
+                    spacing: '5dp'
+                    padding: '5dp'
+
+            BoxLayout:
+                orientation: 'horizontal'
+                size_hint_y: 0.1
+                spacing: '10dp'
+
+                Button:
+                    text: '清空'
+                    background_color: 0.8, 0.5, 0.5, 1
+                    on_press: root.clear_all_tasks()
+
+                Button:
+                    text: '返回'
+                    background_color: 0.6, 0.6, 0.6, 1
+                    on_press: app.root.current = 'main'
+
+        Button:
+            text: '专注'
+            font_size: '18sp'
+            color: 1, 1, 1, 1
+            background_color: 0.9, 0.2, 0.2, 1
+            size_hint: None, None
+            size: '70dp', '70dp'
+            pos_hint: {'center_x': 0.5, 'y': 0.02}
+            background_normal: ''
+            background_down: ''
+            canvas.before:
+                Color:
+                    rgba: 0.9, 0.2, 0.2, 1
+                Ellipse:
+                    pos: self.pos
+                    size: self.size
+            on_press: root.start_quick_focus()
+
+<FocusScreen>:
+    name: 'focus'
+
+    FloatLayout:
+        canvas.before:
+            Color:
+                rgba: 0.1, 0.1, 0.1, 1
+            Rectangle:
+                pos: self.pos
+                size: self.size
+
+        Label:
+            id: timer_display
+            text: '开始专注'
+            font_size: '72sp'
+            color: 1, 1, 1, 1
+            size_hint: None, None
+            size: self.texture_size
+            pos_hint: {'center_x': 0.5, 'center_y': 0.6}
+            bold: True
+
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint: 0.8, 0.1
+            pos_hint: {'center_x': 0.5, 'center_y': 0.4}
+            spacing: '20dp'
+
+            Button:
+                id: start_button
+                text: '开始25分钟专注'
+                font_size: '18sp'
+                background_color: 0.2, 0.8, 0.2, 1
+                on_press: root.start_focus_mode()
+
+        Button:
+            text: '返回'
+            font_size: '16sp'
+            color: 1, 1, 1, 1
+            background_color: 0.3, 0.3, 0.3, 0.8
+            size_hint: None, None
+            size: '80dp', '40dp'
+            pos_hint: {'x': 0.05, 'y': 0.05}
+            on_press: root.go_back()
+
+        Button:
+            text: '闪卡'
+            font_size: '16sp'
+            color: 1, 1, 1, 1
+            background_color: 0.2, 0.5, 0.8, 0.8
+            size_hint: None, None
+            size: '80dp', '40dp'
+            pos_hint: {'right': 0.95, 'y': 0.05}
+            on_press: root.show_quick_quiz()
+
+        Button:
+            id: duration_button
+            text: '25分钟'
+            font_size: '16sp'
+            color: 1, 1, 1, 1
+            background_color: 0.5, 0.3, 0.8, 0.8
+            size_hint: None, None
+            size: '80dp', '40dp'
+            pos_hint: {'right': 0.95, 'top': 0.95}
+            on_press: root.show_duration_settings()
+
+<QuestionWorkshopScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        padding: 10
+        spacing: 5
+
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint_y: 0.08
+            spacing: 5
+
+            Button:
+                text: '←'
+                size_hint_x: 0.1
+                font_size: '18sp'
+                background_color: (0.3, 0.6, 0.9, 1)
+                color: (1, 1, 1, 1)
+                on_press: root.navigate_back()
+                id: back_button
+
+            PathBreadcrumb:
+                size_hint_x: 0.8
+                id: path_breadcrumb
+                navigate_callback: root.navigate_to_category
+
+            Button:
+                text: '+'
+                size_hint_x: 0.1
+                font_size: '18sp'
+                background_color: (0.2, 0.7, 0.3, 1)
+                color: (1, 1, 1, 1)
+                on_press: root.show_add_menu()
+
+        ScrollView:
+            size_hint_y: 0.85
+            bar_width: 8
+            bar_color: (0.7, 0.7, 0.7, 0.8)
+            do_scroll_x: False
+
+            GridLayout:
+                id: content_container
+                cols: 1
+                size_hint_y: None
+                height: self.minimum_height
+                spacing: 10
+                padding: [5, 5, 5, 5]
+
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint_y: 0.07
+            padding: [10, 5, 10, 5]
+            spacing: 10
+
+            Button:
+                text: '返回'
+                font_size: '16sp'
+                background_color: (0.3, 0.5, 0.8, 1)
+                color: (1, 1, 1, 1)
+                on_press: root.go_to_main_screen()
+
+            Button:
+                text: '上传题目'
+                font_size: '16sp'
+                background_color: (0.2, 0.7, 0.3, 1)
+                color: (1, 1, 1, 1)
+                on_press: root.show_upload_popup()
+
+<TaskDetailPopup>:
+    title_size: '18sp'
+    separator_height: 1
+
+    BoxLayout:
+        orientation: 'vertical'
+        padding: '10dp'
+        spacing: '10dp'
+
+        BoxLayout:
+            orientation: 'vertical'
+            size_hint_y: 0.2
+            spacing: '5dp'
+
+            Label:
+                text: '任务名称:'
+                size_hint_y: 0.3
+
+            TextInput:
+                id: name_input
+                multiline: False
+                size_hint_y: 0.7
+
+        BoxLayout:
+            orientation: 'vertical'
+            size_hint_y: 0.5
+            spacing: '5dp'
+
+            Label:
+                text: '任务描述:'
+                size_hint_y: 0.2
+
+            TextInput:
+                id: desc_input
+                multiline: True
+                size_hint_y: 0.8
+
+        BoxLayout:
+            orientation: 'horizontal'
+            size_hint_y: 0.2
+            spacing: '10dp'
+
+            Button:
+                text: '取消'
+                background_color: 0.7, 0.7, 0.7, 1
+                on_press: root.dismiss()
+
+            Button:
+                text: '保存'
+                background_color: 0.3, 0.6, 0.9, 1
+                on_press: root.save_task()

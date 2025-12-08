@@ -7,9 +7,7 @@ def create_progress_updater(popup):
 
     return update_progress
 
-import os
 from kivy.core.text import LabelBase
-from kivy.config import Config
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.lang import Builder
 from kivy.core.window import Window
@@ -44,7 +42,7 @@ Config.set('kivy', 'default_font', ['SimHei', FONT_PATH])
 Config.set('graphics', 'default_font', ['SimHei', FONT_PATH])
 
 try:
-    LabelBase.register(name='SimHei', fn_regular=FONT_PATH)
+    LabelBase.register(name='Roboto', fn_regular=FONT_PATH)
     print(f"字体注册成功: {FONT_PATH}")
 except Exception as e:
     print(f"字体注册失败: {e}")
@@ -58,16 +56,6 @@ def init_application():
         question_bank = QuestionBankV2()
         stats = question_bank.get_statistics()
         print(f"题库统计: {stats['category_count']} 个分类, {stats['question_count']} 道题目")
-
-        notes_count = 0
-        try:
-            if hasattr(question_bank, 'get_questions_with_notes'):
-                notes_count = len(question_bank.get_questions_with_notes())
-                print(f"有笔记的题目: {notes_count} 道")
-            else:
-                print("提示: QuestionBankV2 没有 get_questions_with_notes 方法")
-        except Exception as e:
-            print(f"获取笔记统计失败: {e}")
 
         question_bank.close()
         print("树形题库系统初始化完成")
@@ -342,146 +330,46 @@ class FocusScreen(Screen):
         self.current_duration = 25
         self.confirm_count = 0  # 添加确认次数计数器
 
-        # 使用更有趣的确认消息
+        # 确保在这里正确初始化确认消息列表
         self.confirmation_messages = [
             "不再坚持一下吗？专注不易，放弃可惜",
             "真的要退出吗？专注的每一分钟都很宝贵",
             "最后确认：确定要放弃这次专注吗？"
         ]
 
-    def show_exit_confirmation(self):
-        """显示退出确认对话框 - 无动画效果"""
-        if self.confirm_count > 3:
-            # 如果已经确认三次，直接退出
-            self.confirm_exit(None)
-            return
+        print(f"确认消息列表已初始化: {self.confirmation_messages}")
 
-        # 创建内容布局
-        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
-
-        # 添加标题行
-        title_box = BoxLayout(orientation='horizontal', size_hint_y=0.3)
-
-        # 进度指示器
-        progress_text = f"退出确认 {self.confirm_count}/3"
-        progress_label = Label(
-            text=progress_text,
-            font_size='14sp',
-            color=(0.5, 0.5, 0.5, 1),
-            bold=True,
-            size_hint_x=0.5
-        )
-        title_box.add_widget(progress_label)
-
-        # 进度点
-        progress_dots = BoxLayout(orientation='horizontal', size_hint_x=0.5)
-        for i in range(1, 4):
-            if i <= self.confirm_count:
-                dot_color = (0.8, 0.2, 0.2, 1)  # 红色 - 已确认
-            elif i == self.confirm_count + 1:
-                dot_color = (0.3, 0.6, 0.9, 1)  # 蓝色 - 当前
+    def go_back(self):
+        """返回主屏幕 - 如果专注进行中则显示三次确认对话框"""
+        try:
+            if self.focus_mode and self.focus_mode.is_active:
+                print("专注进行中，显示第一次退出确认")
+                self.confirm_count = 1
+                print(f"确认次数设置为: {self.confirm_count}")
+                self.show_exit_confirmation()
             else:
-                dot_color = (0.7, 0.7, 0.7, 0.5)  # 灰色 - 未到
+                # 直接返回主屏幕
+                if self.manager:
+                    self.manager.current = 'main'
+                    print("专注未激活，直接返回主屏幕")
 
-            dot = Label(
-                text="●",
-                font_size='16sp',
-                color=dot_color
-            )
-            progress_dots.add_widget(dot)
+        except Exception as e:
+            print(f"Error in go_back: {e}")
+            import traceback
+            traceback.print_exc()
+            # 出错时也尝试返回主屏幕
+            if self.manager:
+                self.manager.current = 'main'
 
-        title_box.add_widget(progress_dots)
-        content.add_widget(title_box)
-
-        # 消息内容
-        message_index = min(self.confirm_count - 1, len(self.confirmation_messages) - 1)
-        message = self.confirmation_messages[message_index]
-
-        message_label = Label(
-            text=message,
-            font_size='16sp',
-            halign='center',
-            valign='middle'
-        )
-        message_label.bind(size=message_label.setter('text_size'))
-        content.add_widget(message_label)
-
-        # 如果是第三次确认，添加额外提示
-        if self.confirm_count == 3:
-            warning_label = Label(
-                text="注意：这是最后一次确认，退出后无法恢复本次专注进度",
-                font_size='12sp',
-                color=(0.8, 0.2, 0.2, 1)
-            )
-            content.add_widget(warning_label)
-
-        # 按钮区域
-        button_layout = BoxLayout(orientation='horizontal', spacing=10, size_hint_y=0.3)
-
-        # 确认按钮 - 根据不同次数显示不同样式
-        if self.confirm_count < 3:
-            confirm_text = f"继续确认 ({self.confirm_count}/3)"
-            confirm_bg_color = (0.3, 0.6, 0.9, 1)  # 蓝色
-        else:
-            confirm_text = "✅ 确定退出"
-            confirm_bg_color = (0.8, 0.2, 0.2, 1)  # 红色
-
-        confirm_btn = Button(
-            text=confirm_text,
-            background_color=confirm_bg_color,
-            color=(1, 1, 1, 1),
-            bold=True
-        )
-        confirm_btn.bind(on_press=self.handle_confirm_exit)
-
-        # 取消按钮
-        cancel_text = "❌ 取消"
-        cancel_btn = Button(
-            text=cancel_text,
-            background_color=(0.2, 0.6, 0.2, 1),
-            color=(1, 1, 1, 1)
-        )
-        cancel_btn.bind(on_press=self.handle_cancel_exit)
-
-        button_layout.add_widget(confirm_btn)
-        button_layout.add_widget(cancel_btn)
-        content.add_widget(button_layout)
-
-        # 创建弹窗
-        self.exit_popup = Popup(
-            title="退出专注",
-            title_size='16sp',
-            content=content,
-            size_hint=(0.8, 0.5),
-            separator_color=(0.7, 0.7, 0.7, 1),
-            auto_dismiss=False
-        )
-
-        # 添加背景颜色
-        with self.exit_popup.canvas.before:
-            Color(0.98, 0.98, 0.98, 1)
-            self.exit_popup.bg_rect = Rectangle(pos=self.exit_popup.pos, size=self.exit_popup.size)
-
-        self.exit_popup.bind(
-            pos=lambda obj, pos: setattr(self.exit_popup.bg_rect, 'pos', pos),
-            size=lambda obj, size: setattr(self.exit_popup.bg_rect, 'size', size)
-        )
-
-        self.exit_popup.open()
-
-        # 移除动画效果
-        if hasattr(self.exit_popup, 'background'):
-            self.exit_popup.background = ''
-
-        # 直接设置弹窗为完全显示（无动画）
-        self.exit_popup.opacity = 1
-
-    # 处理确认退出按钮点击 - 无动画效果
     def handle_confirm_exit(self, instance):
         """处理确认退出按钮点击 - 无动画效果"""
+        print(f"\n=== 确认退出按钮被点击 ===")
+        print(f"当前确认次数: {self.confirm_count}, 最大确认次数: 3")
+
         if self.confirm_count < 3:
             # 还没确认三次，增加计数并显示下一次确认
             self.confirm_count += 1
+            print(f"确认次数增加为: {self.confirm_count}")
 
             # 直接关闭弹窗（无动画）
             self.exit_popup.dismiss()
@@ -490,16 +378,289 @@ class FocusScreen(Screen):
             Clock.schedule_once(lambda dt: self.show_exit_confirmation(), 0.1)
         else:
             # 已经确认三次，真正退出
+            print("已确认三次，执行退出")
             self.confirm_exit(instance)
 
-    # 处理取消退出按钮点击 - 无动画效果
     def handle_cancel_exit(self, instance):
         """处理取消退出按钮点击 - 无动画效果"""
+        print(f"\n=== 取消退出按钮被点击 ===")
+        print(f"取消退出，重置确认次数（当前: {self.confirm_count}）")
         self.confirm_count = 0  # 重置确认次数
 
         # 直接关闭弹窗（无动画）
         self.exit_popup.dismiss()
 
+        print("确认次数已重置为 0")
+
+    def confirm_exit(self, instance):
+        """确认退出专注模式"""
+        print("\n=== 确认退出专注模式 ===")
+
+        # 停止专注模式
+        self.stop_focus_mode()
+
+        # 重置确认次数
+        self.confirm_count = 0
+        print("确认次数重置为 0")
+
+        # 关闭确认弹窗（如果存在）
+        if hasattr(self, 'exit_popup') and self.exit_popup:
+            self.exit_popup.dismiss()
+            print("退出确认弹窗已关闭")
+
+        # 返回主屏幕
+        if self.manager:
+            self.manager.current = 'main'
+            print("已返回主屏幕")
+
+    def show_exit_confirmation(self):
+        """显示退出确认对话框 - 修复版"""
+        print(f"\n=== 显示退出确认对话框 ===")
+        print(f"当前确认次数: {self.confirm_count}")
+
+        # 确保消息列表存在
+        if not hasattr(self, 'confirmation_messages'):
+            self.confirmation_messages = [
+                "不再坚持一下吗？专注不易，放弃可惜",
+                "真的要退出吗？专注的每一分钟都很宝贵",
+                "最后确认：确定要放弃这次专注吗？"
+            ]
+
+        print(f"可用消息列表: {self.confirmation_messages}")
+        print(f"消息数量: {len(self.confirmation_messages)}")
+
+        # 只在确认次数超过3时才直接退出（第4次及以上）
+        if self.confirm_count > 3:
+            print("确认次数超过3，直接退出")
+            self.confirm_exit(None)
+            return
+
+        # 第1-3次确认都显示对话框
+        print(f"第{self.confirm_count}次确认，显示对话框")
+
+        # 创建内容布局 - 使用BoxLayout确保布局正确
+        content = BoxLayout(
+            orientation='vertical',
+            spacing=5,
+            padding=[10, 15, 10, 15]
+        )
+
+        # 设置白色背景
+        with content.canvas.before:
+            Color(1, 1, 1, 1)  # 白色背景
+            content.rect = Rectangle(pos=content.pos, size=content.size)
+
+        content.bind(
+            pos=lambda obj, pos: setattr(content.rect, 'pos', pos),
+            size=lambda obj, size: setattr(content.rect, 'size', size)
+        )
+
+        # 第一部分：进度指示器
+        progress_box = BoxLayout(
+            orientation='horizontal',
+            size_hint_y=0.15,
+            padding=[5, 5]
+        )
+
+        # 进度文本 - 使用深色文字以便在白色背景上可见
+        progress_text = Label(
+            text=f"退出确认 ({self.confirm_count}/3)",
+            font_size='16sp',
+            color=(0.2, 0.2, 0.2, 1),  # 深灰色文字
+            bold=True,
+            size_hint_x=0.5,
+            halign='left',
+            valign='middle'
+        )
+        progress_text.bind(size=progress_text.setter('text_size'))
+        progress_box.add_widget(progress_text)
+
+        # 进度点 - 移除Emoji，使用纯文本
+        dots_box = BoxLayout(
+            orientation='horizontal',
+            size_hint_x=0.5,
+            spacing=5
+        )
+        for i in range(3):
+            if i + 1 < self.confirm_count:
+                # 已完成 - 红色
+                color = (0.8, 0.2, 0.2, 1)
+                dot_text = "●"
+            elif i + 1 == self.confirm_count:
+                # 当前 - 蓝色
+                color = (0.3, 0.6, 0.9, 1)
+                dot_text = "●"
+            else:
+                # 未到 - 浅灰色
+                color = (0.7, 0.7, 0.7, 0.5)
+                dot_text = "○"
+
+            dot = Label(
+                text=dot_text,
+                font_size='18sp',
+                color=color
+            )
+            dots_box.add_widget(dot)
+        progress_box.add_widget(dots_box)
+        content.add_widget(progress_box)
+
+        # 第二部分：主要消息区域 - 确保有足够空间显示消息
+        message_container = BoxLayout(
+            orientation='vertical',
+            size_hint_y=0.6,
+            padding=[10, 15],
+            spacing=15
+        )
+
+        # 计算消息索引
+        msg_index = self.confirm_count - 1
+        if msg_index < 0:
+            msg_index = 0
+        elif msg_index >= len(self.confirmation_messages):
+            msg_index = len(self.confirmation_messages) - 1
+
+        print(f"消息索引: {msg_index}, 消息: {self.confirmation_messages[msg_index]}")
+
+        # 图标 - 使用纯文本代替Emoji
+        if self.confirm_count == 1:
+            icon_text = "?"
+        elif self.confirm_count == 2:
+            icon_text = "??"
+        else:
+            icon_text = "???"
+
+        icon_label = Label(
+            text=icon_text,
+            font_size='40sp',
+            size_hint_y=0.3,
+            color=(0.3, 0.3, 0.3, 1)  # 深灰色
+        )
+        message_container.add_widget(icon_label)
+
+        # 主要消息文本 - 确保这个部分不会被隐藏
+        message = self.confirmation_messages[msg_index]
+        message_label = Label(
+            text=message,
+            font_size='20sp',
+            halign='center',
+            valign='middle',
+            size_hint_y=0.7,
+            line_height=1.3,
+            color=(0.1, 0.1, 0.1, 1)  # 接近黑色的深灰色
+        )
+        message_label.bind(
+            size=message_label.setter('text_size'),
+            texture_size=lambda lbl, size: setattr(lbl, 'height', max(80, size[1] + 20))
+        )
+        message_container.add_widget(message_label)
+
+        content.add_widget(message_container)
+
+        # 第三部分：警告信息（仅第三次确认时显示）
+        if self.confirm_count == 3:
+            warning_container = BoxLayout(
+                orientation='horizontal',
+                size_hint_y=0.1,
+                padding=[10, 0],
+                spacing=5
+            )
+
+            # 警告图标 - 使用纯文本
+            warning_icon = Label(
+                text="注意",
+                font_size='14sp',
+                color=(0.9, 0.6, 0.1, 1),  # 橙色
+                size_hint_x=0.2
+            )
+
+            warning_text = Label(
+                text="退出后专注进度将丢失",
+                font_size='14sp',
+                color=(0.9, 0.6, 0.1, 1),  # 橙色
+                bold=True,
+                size_hint_x=0.8,
+                halign='left',
+                valign='middle'
+            )
+            warning_text.bind(size=warning_text.setter('text_size'))
+
+            warning_container.add_widget(warning_icon)
+            warning_container.add_widget(warning_text)
+            content.add_widget(warning_container)
+        else:
+            # 如果不是第三次确认，添加空白占位符
+            placeholder = BoxLayout(size_hint_y=0.1)
+            content.add_widget(placeholder)
+
+        # 第四部分：按钮区域
+        button_container = BoxLayout(
+            orientation='horizontal',
+            size_hint_y=0.15,
+            spacing=15,
+            padding=[0, 5]
+        )
+
+        # 确认按钮
+        if self.confirm_count < 3:
+            confirm_text = f"继续确认 ({self.confirm_count}/3)"
+            confirm_bg_color = (0.3, 0.6, 0.9, 1)  # 蓝色背景
+            confirm_text_color = (1, 1, 1, 1)  # 白色文字
+        else:
+            confirm_text = "确定退出"
+            confirm_bg_color = (0.9, 0.3, 0.3, 1)  # 红色背景
+            confirm_text_color = (1, 1, 1, 1)  # 白色文字
+
+        confirm_btn = Button(
+            text=confirm_text,
+            background_color=confirm_bg_color,
+            color=confirm_text_color,
+            bold=True,
+            font_size='16sp'
+        )
+        confirm_btn.bind(on_press=self.handle_confirm_exit)
+
+        # 取消按钮 - 移除Emoji
+        cancel_btn = Button(
+            text="取消退出",
+            background_color=(0.2, 0.7, 0.3, 1),  # 绿色背景
+            color=(1, 1, 1, 1),  # 白色文字
+            bold=True,
+            font_size='16sp'
+        )
+        cancel_btn.bind(on_press=self.handle_cancel_exit)
+
+        button_container.add_widget(confirm_btn)
+        button_container.add_widget(cancel_btn)
+        content.add_widget(button_container)
+
+        # 创建弹窗
+        self.exit_popup = Popup(
+            title="退出专注确认",
+            title_size='18sp',
+            title_color=(0.2, 0.2, 0.2, 1),  # 深灰色标题
+            content=content,
+            size_hint=(0.85, 0.7),  # 增加高度确保显示所有内容
+            separator_color=(0.7, 0.7, 0.7, 1),
+            background='',  # 移除默认背景
+            auto_dismiss=False
+        )
+
+        # 添加白色背景到弹窗
+        with self.exit_popup.canvas.before:
+            Color(1, 1, 1, 1)  # 白色
+            self.exit_popup.bg_rect = Rectangle(pos=self.exit_popup.pos, size=self.exit_popup.size)
+
+        self.exit_popup.bind(
+            pos=lambda obj, pos: setattr(self.exit_popup.bg_rect, 'pos', pos),
+            size=lambda obj, size: setattr(self.exit_popup.bg_rect, 'size', size)
+        )
+
+        # 打开弹窗
+        self.exit_popup.open()
+
+        print(f"弹窗已打开，显示第{self.confirm_count}次确认")
+        print(f"主消息: {message}")
+        print("-" * 50)
     def on_enter(self):
         self.update_ui_state()
         self.update_duration_button()
@@ -812,46 +973,6 @@ class FocusScreen(Screen):
             except Exception as e2:
                 print(f"打开快速闪卡弹窗也失败: {e2}")
 
-    def go_back(self):
-        """返回主屏幕 - 如果专注进行中则显示三次确认对话框"""
-        try:
-            print(f"go_back called from FocusScreen, focus active: {self.focus_mode.is_active}")
-
-            # 如果专注正在进行中，显示第一次退出确认对话框
-            if self.focus_mode and self.focus_mode.is_active:
-                print("专注进行中，显示第一次退出确认")
-                self.confirm_count = 1  # 重置确认次数为1
-                self.show_exit_confirmation()
-            else:
-                # 直接返回主屏幕
-                if self.manager:
-                    self.manager.current = 'main'
-                else:
-                    print("Error: Screen manager not found")
-
-        except Exception as e:
-            print(f"Error in go_back: {e}")
-            import traceback
-            traceback.print_exc()
-            # 出错时也尝试返回主屏幕
-            if self.manager:
-                self.manager.current = 'main'
-
-    def confirm_exit(self, instance):
-        """确认退出专注模式"""
-        print("确认退出专注模式")
-        # 停止专注模式
-        self.stop_focus_mode()
-        # 重置确认次数
-        self.confirm_count = 0
-
-        # 关闭确认弹窗（如果存在）
-        if hasattr(self, 'exit_popup') and self.exit_popup:
-            self.exit_popup.dismiss()
-
-        # 返回主屏幕
-        if self.manager:
-            self.manager.current = 'main'
 
     def show_completion_message(self):
         content = BoxLayout(orientation='vertical', spacing=10, padding=10)

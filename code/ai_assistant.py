@@ -10,11 +10,9 @@ from openai import OpenAI
 from datetime import datetime
 import logging
 
-# 图片处理相关导入
 from PIL import Image, ImageEnhance, ImageFilter
 import pytesseract
 
-# 从config.py导入API密钥
 try:
     from config import API_KEY
 except ImportError:

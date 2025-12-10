@@ -7,16 +7,6 @@ def create_progress_updater(popup):
 
     return update_progress
 
-from kivy.core.text import LabelBase
-from kivy.uix.screenmanager import ScreenManager, Screen
-from kivy.lang import Builder
-from kivy.core.window import Window
-from kivy.properties import StringProperty, NumericProperty
-from todo_manager import TodoManager
-from focus_mode import FocusMode
-from ai_assistant import AIAssistant
-from components import TaskDetailPopup
-
 
 
 from kivy.config import Config
@@ -33,10 +23,20 @@ PROJECT_ROOT = CURRENT_DIR.parent
 # 构建字体路径
 FONT_PATH = str(PROJECT_ROOT / 'fonts' / 'simhei.ttf')
 FONT_DIR = str(PROJECT_ROOT / 'fonts')
-
+f = str(PROJECT_ROOT/'tesseract.exe')
 # 设置字体路径
 os.environ['KIVY_TEXT'] = FONT_DIR
-
+import pytesseract
+pytesseract.pytesseract.tesseract_cmd =f
+from kivy.core.text import LabelBase
+from kivy.uix.screenmanager import ScreenManager, Screen
+from kivy.lang import Builder
+from kivy.core.window import Window
+from kivy.properties import StringProperty, NumericProperty
+from todo_manager import TodoManager
+from focus_mode import FocusMode
+from ai_assistant import AIAssistant
+from components import TaskDetailPopup
 # 配置字体
 Config.set('kivy', 'default_font', ['SimHei', FONT_PATH])
 Config.set('graphics', 'default_font', ['SimHei', FONT_PATH])

@@ -1,4 +1,3 @@
-
 import sqlite3
 
 
@@ -11,10 +10,10 @@ class QuestionBankV2:
         self.init_database()
 
     def init_database(self):
-        """初始化数据库，创建新的表结构"""
+        """初始化数据库，创建多级分类表和题目表，并确保根分类存在"""
         cursor = self.conn.cursor()
 
-        # 1. 创建多级分类表
+        # 创建多级分类表
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS categories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,7 +24,7 @@ class QuestionBankV2:
             )
         ''')
 
-        # 2. 创建支持多级分类的题目表
+        # 创建支持多级分类的题目表
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS questions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,7 +39,7 @@ class QuestionBankV2:
             )
         ''')
 
-        # 3. 确保根分类存在
+        # 初始化根分类
         cursor.execute("SELECT id FROM categories WHERE parent_id = 0 AND name = '根目录'")
         if not cursor.fetchone():
             cursor.execute("INSERT INTO categories (name, parent_id, path) VALUES ('根目录', 0, '根目录')")
@@ -49,12 +48,11 @@ class QuestionBankV2:
         print("数据库v2结构初始化完成")
 
     def create_category(self, name, parent_id=0):
-        """创建新分类"""
+        """创建新分类，自动生成分类路径"""
         cursor = self.conn.cursor()
 
-        # 获取父分类路径
+        # 处理父分类信息，默认使用根目录
         if parent_id == 0:
-            # 获取根目录ID
             cursor.execute("SELECT id FROM categories WHERE name = '根目录'")
             parent_id = cursor.fetchone()[0]
             parent_path = '根目录'
@@ -64,12 +62,11 @@ class QuestionBankV2:
             if result:
                 parent_name, parent_path = result
             else:
-                # 如果父分类不存在，使用根目录
                 cursor.execute("SELECT id FROM categories WHERE name = '根目录'")
                 parent_id = cursor.fetchone()[0]
                 parent_path = '根目录'
 
-        # 创建新分类
+        # 插入新分类
         path = f"{parent_path}/{name}"
         cursor.execute(
             "INSERT INTO categories (name, parent_id, path) VALUES (?, ?, ?)",
@@ -82,11 +79,11 @@ class QuestionBankV2:
         return category_id
 
     def get_categories_by_parent(self, parent_id=0):
-        """获取指定父分类下的子分类"""
+        """获取指定父分类下的所有子分类，包含子分类数和题目数统计"""
         cursor = self.conn.cursor()
 
+        # 定位根目录ID
         if parent_id == 0:
-            # 获取根目录ID
             cursor.execute("SELECT id FROM categories WHERE name = '根目录'")
             parent_id = cursor.fetchone()[0]
 
@@ -113,7 +110,7 @@ class QuestionBankV2:
         return categories
 
     def get_category_info(self, category_id):
-        """获取分类信息"""
+        """获取指定分类的详细信息，包含子分类数和题目数统计"""
         cursor = self.conn.cursor()
         cursor.execute('''
             SELECT id, name, parent_id, path, 
@@ -137,7 +134,7 @@ class QuestionBankV2:
         return None
 
     def get_category_path_info(self, category_id):
-        """获取分类的路径信息（从根到当前）"""
+        """递归获取分类的路径信息（从根到当前分类）"""
         if category_id == 0:
             return [{'id': 0, 'name': '根目录', 'path': '根目录'}]
 
@@ -163,7 +160,7 @@ class QuestionBankV2:
                 'parent_id': row[2]
             })
 
-        # 如果为空，添加根目录
+        # 兜底处理：路径为空时返回根目录
         if not path_info:
             cursor.execute("SELECT id, name FROM categories WHERE name = '根目录'")
             root = cursor.fetchone()
@@ -177,7 +174,7 @@ class QuestionBankV2:
         return path_info
 
     def get_questions_by_category(self, category_id):
-        """获取分类下的题目"""
+        """获取指定分类下的所有题目，按创建时间倒序排列"""
         cursor = self.conn.cursor()
 
         cursor.execute('''
@@ -202,7 +199,7 @@ class QuestionBankV2:
         return questions
 
     def add_question_to_category(self, category_id, question_data):
-        """添加题目到指定分类"""
+        """添加题目到指定分类，question_data包含type/question/answer/difficulty/needs_review字段"""
         cursor = self.conn.cursor()
 
         cursor.execute('''
@@ -223,7 +220,7 @@ class QuestionBankV2:
         return question_id
 
     def get_random_questions(self, limit=10, category_id=None):
-        """获取随机题目"""
+        """获取随机题目，可指定分类和数量"""
         cursor = self.conn.cursor()
 
         if category_id:
@@ -255,7 +252,7 @@ class QuestionBankV2:
         return questions
 
     def delete_category(self, category_id):
-        """删除分类（及其所有子分类和题目）"""
+        """递归删除分类及其所有子分类、关联题目"""
         cursor = self.conn.cursor()
 
         # 递归获取所有子分类ID
@@ -268,19 +265,19 @@ class QuestionBankV2:
 
         all_categories = get_all_subcategories(category_id)
 
-        # 删除这些分类的所有题目
+        # 删除关联题目
         placeholders = ','.join(['?'] * len(all_categories))
         cursor.execute(f"DELETE FROM questions WHERE category_id IN ({placeholders})", all_categories)
 
-        # 删除这些分类（注意顺序，先删子分类）
-        all_categories.reverse()  # 子分类在前，父分类在后
+        # 逆序删除分类（先删子分类，再删父分类）
+        all_categories.reverse()
         cursor.executemany("DELETE FROM categories WHERE id = ?", [(cid,) for cid in all_categories])
 
         self.conn.commit()
         print(f"删除分类成功，共删除 {len(all_categories)} 个分类及其题目")
 
     def update_category_name(self, category_id, new_name):
-        """更新分类名称"""
+        """更新分类名称，并同步更新子分类的路径"""
         cursor = self.conn.cursor()
 
         # 获取原分类信息
@@ -299,16 +296,14 @@ class QuestionBankV2:
             parent_path_result = cursor.fetchone()
             parent_path = parent_path_result[0] if parent_path_result else '根目录'
 
-        # 新路径
+        # 更新当前分类名称和路径
         new_path = f"{parent_path}/{new_name}"
-
-        # 更新当前分类
         cursor.execute(
             "UPDATE categories SET name = ?, path = ? WHERE id = ?",
             (new_name, new_path, category_id)
         )
 
-        # 更新所有子分类的路径
+        # 同步更新子分类路径
         cursor.execute("SELECT id, path FROM categories WHERE path LIKE ?", (f"{old_path}/%",))
         for row in cursor.fetchall():
             sub_id, sub_path = row
@@ -320,7 +315,7 @@ class QuestionBankV2:
         return True
 
     def search_categories(self, keyword):
-        """搜索分类"""
+        """根据关键词搜索分类（匹配名称或路径）"""
         cursor = self.conn.cursor()
         search_term = f"%{keyword}%"
 
@@ -343,7 +338,7 @@ class QuestionBankV2:
         return categories
 
     def get_statistics(self):
-        """获取统计信息"""
+        """获取题库统计信息：分类总数、题目总数、根分类数"""
         cursor = self.conn.cursor()
 
         cursor.execute("SELECT COUNT(*) FROM categories")
@@ -364,4 +359,3 @@ class QuestionBankV2:
     def close(self):
         """关闭数据库连接"""
         self.conn.close()
-

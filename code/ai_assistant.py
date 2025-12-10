@@ -10,50 +10,27 @@ from openai import OpenAI
 from datetime import datetime
 import logging
 
-# 图片处理相关导入
 from PIL import Image, ImageEnhance, ImageFilter
 import pytesseract
 
-# 从config.py导入API密钥
 try:
     from config import API_KEY
 except ImportError:
-    print("警告: 未找到config.py文件或API_KEY配置")
     API_KEY = None
 
-# 关闭PDF解析库的调试日志
 logging.getLogger('pdfplumber').setLevel(logging.WARNING)
 logging.getLogger('PyPDF2').setLevel(logging.WARNING)
 logging.getLogger('pdfminer').setLevel(logging.WARNING)
 
-
 class AIAssistant:
-    """
-    AI助手类 - 负责与大型语言模型交互，提取和处理题目
-    基于ModelScope API实现，支持文本/PDF/图片题目提取
-    """
-
     def __init__(self, api_keys: List[str] = None, base_url: str = None,
                  model: str = "Qwen/Qwen2.5-Coder-32B-Instruct",
                  questions_dir: str = "questions_library",
                  stream: bool = True):
-        """
-        初始化AI助手
-
-        Args:
-            api_keys: API密钥列表，支持多个密钥轮换使用（保持接口不变，但内部简化为只使用第一个）
-            base_url: API基础URL
-            model: 使用的模型名称
-            questions_dir: 题目库目录
-            stream: 是否使用流式输出
-        """
-        # 处理API密钥 - 保持接口兼容性
         if api_keys is None:
-            # 首先尝试从config.py导入的API_KEY
             if API_KEY:
                 api_keys = [API_KEY]
             else:
-                # 然后尝试环境变量
                 env_keys = os.getenv('MODELSCOPE_API_KEY', '')
                 if env_keys:
                     api_keys = [key.strip() for key in env_keys.split(',') if key.strip()]
@@ -68,72 +45,55 @@ class AIAssistant:
                 "3. 或直接传入api_keys参数"
             )
 
-        # 保持原有的api_keys属性，但内部只使用第一个
         self.api_keys = api_keys
         self.base_url = base_url or "https://api-inference.modelscope.cn/v1/"
         self.model = model
         self.questions_dir = questions_dir
         self.stream = stream
 
-        # 创建题目库目录
         os.makedirs(self.questions_dir, exist_ok=True)
         print(f"题目库目录: {os.path.abspath(self.questions_dir)}")
         print(f"流式输出: {'启用' if self.stream else '禁用'}")
         print(f"使用模型: {self.model}")
 
-        # 创建OpenAI客户端（只使用第一个API密钥）
         self.client = OpenAI(
             api_key=self.api_keys[0],
             base_url=self.base_url
         )
 
-        # API调用管理 - 简化为简单的间隔控制
         self.last_api_call_time = 0
-        self.min_call_interval = 2.0  # API调用最小间隔
+        self.min_call_interval = 2.0
         self.api_call_lock = Lock()
 
-        # 客户端使用统计（保持原有接口）
         self.client_stats = {0: {'success': 0, 'failures': 0, 'last_used': 0}}
         self.current_client_index = 0
 
-        # 缓存已处理的文件，避免重复处理
         self.file_cache = {}
 
-        # 新增：取消标志
         self.cancel_event = Event()
         self.is_cancelled = False
 
         print(f"AI助手初始化完成，已加载 {len(self.api_keys)} 个API密钥（使用第一个）")
         print(f"API调用间隔: {self.min_call_interval}秒")
 
-    # ==================== 新增：取消控制方法 ====================
-
     def cancel_processing(self):
-        """取消当前处理"""
         print("收到取消请求，正在停止处理...")
         self.cancel_event.set()
         self.is_cancelled = True
 
     def reset_cancel(self):
-        """重置取消标志"""
         self.cancel_event.clear()
         self.is_cancelled = False
 
     def check_cancelled(self):
-        """检查是否已取消"""
         if self.is_cancelled or self.cancel_event.is_set():
             raise Exception("处理已被用户取消")
         return False
-
-    # ==================== 保持原有接口的方法 ====================
 
     def process_file_and_save_questions(self, file_path: str, file_type: str,
                                         target_dir: str = None,
                                         max_chunk_size: int = 800,
                                         progress_callback=None) -> Dict[str, Any]:
-        """
-        处理文件并保存题目到指定目录（支持文本/PDF/图片）
-        """
         if target_dir is None:
             target_dir = self.questions_dir
 
@@ -144,14 +104,10 @@ class AIAssistant:
         )
 
         result = self.save_questions_to_directory(questions, target_dir, os.path.basename(file_path))
-
         return result
 
     def save_questions_to_directory(self, questions: List[Dict[str, Any]],
                                     target_dir: str, source_filename: str) -> Dict[str, Any]:
-        """
-        保存题目到目录
-        """
         if not questions:
             return {
                 "success": False,
@@ -226,9 +182,6 @@ class AIAssistant:
             }
 
     def update_questions_library_index(self, library_dir: str):
-        """
-        更新题目库索引
-        """
         try:
             index_file = os.path.join(library_dir, "library_index.json")
             index_data = {
@@ -272,11 +225,7 @@ class AIAssistant:
     def process_large_file_and_extract_questions(self, file_path: str, file_type: str,
                                                  max_chunk_size: int = 800,
                                                  progress_callback=None) -> List[Dict[str, Any]]:
-        """
-        处理大文件并提取所有题目（支持文本/PDF/图片）
-        """
         try:
-            # 重置取消标志
             self.reset_cancel()
 
             file_hash = self.get_file_hash(file_path)
@@ -286,7 +235,6 @@ class AIAssistant:
 
             print(f"开始处理文件: {file_path}")
 
-            # 1. 读取文件内容 - 检查取消
             self.check_cancelled()
             content = self.extract_text_from_file(file_path, file_type)
             print(f"原始内容长度: {len(content)} 字符")
@@ -294,7 +242,6 @@ class AIAssistant:
                 print("文件内容为空")
                 return []
 
-            # 2. 预处理内容 - 检查取消
             self.check_cancelled()
             processed_content = self.preprocess_content(content)
             if not processed_content:
@@ -303,7 +250,6 @@ class AIAssistant:
 
             print(f"预处理后内容长度: {len(processed_content)} 字符")
 
-            # 3. 分割内容 - 检查取消
             self.check_cancelled()
             chunks = self.split_content_into_chunks(processed_content, max_chunk_size)
             print(f"将内容分割成 {len(chunks)} 个块")
@@ -311,15 +257,13 @@ class AIAssistant:
             if progress_callback:
                 progress_callback(0, f"文件已分割成 {len(chunks)} 个块")
 
-            # 4. 处理每个块 - 每个块都检查取消
             all_questions = []
             for i, chunk in enumerate(chunks):
-                # 检查是否已取消
                 try:
                     self.check_cancelled()
                 except Exception as e:
                     print(f"处理被取消: {e}")
-                    return all_questions  # 返回已处理的题目
+                    return all_questions
 
                 if progress_callback:
                     progress_callback((i + 1) / len(chunks) * 100, f"正在处理第 {i + 1}/{len(chunks)} 个块...")
@@ -328,11 +272,9 @@ class AIAssistant:
                 chunk_questions = self.extract_questions_from_chunk(chunk, i + 1)
                 all_questions.extend(chunk_questions)
 
-                # 添加延迟避免API限制 - 检查取消
                 if i < len(chunks) - 1:
                     time.sleep(1)
 
-            # 5. 后处理和过滤 - 检查取消
             self.check_cancelled()
             filtered_questions = self.post_process_questions(all_questions)
             print(f"提取到 {len(all_questions)} 道题目，过滤后剩余 {len(filtered_questions)} 道")
@@ -351,9 +293,6 @@ class AIAssistant:
                 return []
 
     def extract_text_from_file(self, file_path: str, file_type: str) -> str:
-        """
-        从文件中提取文本内容（扩展支持图片）
-        """
         try:
             if file_type == 'file' or file_type == 'text':
                 with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -370,9 +309,6 @@ class AIAssistant:
             return ""
 
     def extract_text_from_pdf(self, pdf_path: str) -> str:
-        """
-        从PDF提取文本
-        """
         try:
             import pdfplumber
             text = ""
@@ -390,9 +326,6 @@ class AIAssistant:
             return ""
 
     def extract_text_from_image(self, image_path: str, lang: str = 'chi_sim+eng') -> str:
-        """
-        从图片提取文本（OCR），支持中文+英文混合识别
-        """
         try:
             img = Image.open(image_path)
             img = self.preprocess_image_for_ocr(img)
@@ -412,9 +345,6 @@ class AIAssistant:
             return ""
 
     def preprocess_image_for_ocr(self, img: Image.Image) -> Image.Image:
-        """
-        图片预处理，提高OCR识别准确率
-        """
         img = img.convert('L')
         enhancer = ImageEnhance.Contrast(img)
         img = enhancer.enhance(2.0)
@@ -426,9 +356,6 @@ class AIAssistant:
         return img
 
     def preprocess_content(self, content: str) -> str:
-        """
-        内容预处理
-        """
         if not content:
             return ""
 
@@ -439,171 +366,15 @@ class AIAssistant:
         return content.strip()
 
     def split_content_into_chunks(self, content: str, max_chunk_size: int) -> List[str]:
-        """
-        智能分割内容为更小的块
-        """
         if len(content) <= max_chunk_size:
             return [content]
 
         print(f"内容长度: {len(content)} 字符，最大块大小: {max_chunk_size} 字符")
-
-        chunks_by_question = self._split_by_question_patterns(content, max_chunk_size)
-        if len(chunks_by_question) > 1:
-            print(f"按题目模式分割成 {len(chunks_by_question)} 个块")
-            return chunks_by_question
-
-        chunks_by_paragraph = self._split_by_paragraphs(content, max_chunk_size)
-        if len(chunks_by_paragraph) > 1:
-            print(f"按段落分割成 {len(chunks_by_paragraph)} 个块")
-            return chunks_by_paragraph
-
-        chunks_by_sentence = self._split_by_sentences(content, max_chunk_size)
-        if len(chunks_by_sentence) > 1:
-            print(f"按句子分割成 {len(chunks_by_sentence)} 个块")
-            return chunks_by_sentence
-
         chunks_fixed = self._split_fixed_length(content, max_chunk_size)
         print(f"按固定长度分割成 {len(chunks_fixed)} 个块")
         return chunks_fixed
 
-    def _split_by_question_patterns(self, content: str, max_chunk_size: int) -> List[str]:
-        """
-        按题目编号模式分割
-        """
-        patterns = [
-            r'(?<=\n)\d+[\.、\)）]\s',
-            r'(?<=\n)[一二三四五六七八九十]+[\.、\)）]\s',
-            r'(?<=\n)第\s*\d+\s*题[\.、:：]?\s',
-            r'(?<=\n)Question\s*\d+[\.:]\s',
-            r'(?<=\n)【题目\d+】',
-        ]
-
-        for pattern in patterns:
-            parts = re.split(pattern, content)
-            if len(parts) > 1:
-                chunks = []
-                current_chunk = parts[0] if parts[0].strip() else ""
-
-                for i in range(1, len(parts), 2):
-                    if i + 1 < len(parts):
-                        question_number = parts[i]
-                        question_content = parts[i + 1]
-
-                        if current_chunk:
-                            chunk_with_question = current_chunk + "\n" + question_number + question_content
-                            if len(chunk_with_question) <= max_chunk_size:
-                                chunks.append(chunk_with_question)
-                                current_chunk = ""
-                            else:
-                                if current_chunk:
-                                    chunks.append(current_chunk)
-                                chunks.append(question_number + question_content)
-                                current_chunk = ""
-                        else:
-                            current_chunk = question_number + question_content
-
-                if current_chunk:
-                    chunks.append(current_chunk)
-
-                final_chunks = []
-                for chunk in chunks:
-                    if len(chunk) > max_chunk_size:
-                        sub_chunks = self._split_by_sentences(chunk, max_chunk_size)
-                        final_chunks.extend(sub_chunks)
-                    else:
-                        final_chunks.append(chunk)
-
-                if len(final_chunks) > 1:
-                    return final_chunks
-
-        return [content]
-
-    def _split_by_paragraphs(self, content: str, max_chunk_size: int) -> List[str]:
-        """按段落分割"""
-        paragraphs = re.split(r'\n\s*\n', content)
-        chunks = []
-        current_chunk = ""
-
-        for paragraph in paragraphs:
-            paragraph = paragraph.strip()
-            if not paragraph:
-                continue
-
-            if len(paragraph) > max_chunk_size:
-                paragraph_chunks = self._split_by_sentences(paragraph, max_chunk_size)
-                for p_chunk in paragraph_chunks:
-                    if len(current_chunk) + len(p_chunk) + 2 <= max_chunk_size:
-                        if current_chunk:
-                            current_chunk += "\n\n" + p_chunk
-                        else:
-                            current_chunk = p_chunk
-                    else:
-                        if current_chunk:
-                            chunks.append(current_chunk)
-                        current_chunk = p_chunk
-            else:
-                if len(current_chunk) + len(paragraph) + 2 <= max_chunk_size:
-                    if current_chunk:
-                        current_chunk += "\n\n" + paragraph
-                    else:
-                        current_chunk = paragraph
-                else:
-                    if current_chunk:
-                        chunks.append(current_chunk)
-                    current_chunk = paragraph
-
-        if current_chunk:
-            chunks.append(current_chunk)
-
-        return chunks if len(chunks) > 0 else [content]
-
-    def _split_by_sentences(self, content: str, max_chunk_size: int) -> List[str]:
-        """按句子分割"""
-        sentence_endings = r'(?<=[。！？.!?])\s+'
-        sentences = re.split(sentence_endings, content)
-
-        chunks = []
-        current_chunk = ""
-
-        for sentence in sentences:
-            sentence = sentence.strip()
-            if not sentence:
-                continue
-
-            if len(sentence) > max_chunk_size:
-                sub_parts = re.split(r'[，,;；:]', sentence)
-                for part in sub_parts:
-                    part = part.strip()
-                    if not part:
-                        continue
-
-                    if len(current_chunk) + len(part) + 1 <= max_chunk_size:
-                        if current_chunk:
-                            current_chunk += " " + part
-                        else:
-                            current_chunk = part
-                    else:
-                        if current_chunk:
-                            chunks.append(current_chunk)
-                        current_chunk = part
-            else:
-                if len(current_chunk) + len(sentence) + 1 <= max_chunk_size:
-                    if current_chunk:
-                        current_chunk += " " + sentence
-                    else:
-                        current_chunk = sentence
-                else:
-                    if current_chunk:
-                        chunks.append(current_chunk)
-                    current_chunk = sentence
-
-        if current_chunk:
-            chunks.append(current_chunk)
-
-        return chunks if len(chunks) > 0 else [content]
-
     def _split_fixed_length(self, content: str, max_chunk_size: int) -> List[str]:
-        """固定长度分割，但尽量在合理位置分割"""
         chunks = []
         start = 0
 
@@ -640,9 +411,6 @@ class AIAssistant:
         return chunks
 
     def extract_questions_from_chunk(self, chunk: str, chunk_number: int) -> List[Dict[str, Any]]:
-        """
-        从内容块中提取题目
-        """
         if chunk is None:
             print(f"第{chunk_number}块: chunk为None，跳过处理")
             return []
@@ -662,7 +430,6 @@ class AIAssistant:
         print(f"提示词长度: {len(prompt)} 字符")
 
         try:
-            # 检查是否已取消
             self.check_cancelled()
 
             if self.stream:
@@ -679,16 +446,13 @@ class AIAssistant:
 
         except Exception as e:
             if "处理已被用户取消" in str(e):
-                raise e  # 重新抛出取消异常
+                raise e
             print(f"第{chunk_number}块提取题目失败: {e}")
             import traceback
             traceback.print_exc()
             return []
 
     def build_extraction_prompt(self, chunk: str, chunk_number: int) -> str:
-        """
-        构建题目提取提示词
-        """
         chunk_str = str(chunk) if chunk is not None else ""
         max_chunk_length = 2000
         if len(chunk_str) > max_chunk_length:
@@ -707,7 +471,7 @@ class AIAssistant:
    - answer: 参考答案或解题思路
    - difficulty: 难度等级（1-100）
 
-4. 如果题目有选项，请包含在question字段中，如果题目本身有答案，要从question中删除，放入answer
+4. 如果题目有选项，请包含在question字段中，如果题目本身有答案，要从question中删除，放入answer,并且在questin被挖掉的地方用下划线替代，
 5. 如果文本中没有题目，返回空数组[]
 6. 由于要用于app呈现，对于一个问题除题目与选项、选项与选项之间必须有换行符，其余必须均删除，请你做出相应修改
 7. 如果是可以背记的知识点，可以放入question,answer填略
@@ -729,15 +493,10 @@ class AIAssistant:
 """
 
     def call_ai_api(self, prompt: str, max_retries: int = 3) -> str:
-        """
-        调用AI API（非流式）- 简化版本
-        """
         for attempt in range(max_retries):
             try:
-                # 检查是否已取消
                 self.check_cancelled()
 
-                # 确保间隔时间
                 with self.api_call_lock:
                     current_time = time.time()
                     time_since_last_call = current_time - self.last_api_call_time
@@ -749,7 +508,6 @@ class AIAssistant:
 
                     print(f"调用API (尝试 {attempt + 1}/{max_retries})...")
 
-                    # 调用API（非流式）
                     response = self.client.chat.completions.create(
                         model=self.model,
                         messages=[
@@ -767,7 +525,6 @@ class AIAssistant:
                         stream=False
                     )
 
-                    # 更新最后调用时间和统计
                     self.last_api_call_time = time.time()
                     self.client_stats[self.current_client_index]['last_used'] = time.time()
                     self.client_stats[self.current_client_index]['success'] += 1
@@ -790,15 +547,10 @@ class AIAssistant:
         raise Exception("所有API请求尝试失败")
 
     def call_ai_api_stream(self, prompt: str, max_retries: int = 3) -> str:
-        """
-        调用AI API（流式）- 简化版本
-        """
         for attempt in range(max_retries):
             try:
-                # 检查是否已取消
                 self.check_cancelled()
 
-                # 确保间隔时间
                 with self.api_call_lock:
                     current_time = time.time()
                     time_since_last_call = current_time - self.last_api_call_time
@@ -810,7 +562,6 @@ class AIAssistant:
 
                     print(f"调用API (流式, 尝试 {attempt + 1}/{max_retries})...")
 
-                    # 调用API（流式）
                     response = self.client.chat.completions.create(
                         model=self.model,
                         messages=[
@@ -828,14 +579,11 @@ class AIAssistant:
                         max_tokens=4000
                     )
 
-                    # 更新最后调用时间和统计
                     self.last_api_call_time = time.time()
                     self.client_stats[self.current_client_index]['last_used'] = time.time()
 
-                # 收集流式响应
                 full_response = ""
                 for chunk in response:
-                    # 检查是否已取消（在每个chunk之间）
                     self.check_cancelled()
 
                     if chunk.choices[0].delta.content is not None:
@@ -862,9 +610,6 @@ class AIAssistant:
         raise Exception("所有API流式请求尝试失败")
 
     def parse_ai_response(self, response: str, chunk_number: int) -> List[Dict[str, Any]]:
-        """
-        解析AI响应
-        """
         try:
             cleaned_response = self.clean_ai_response(response)
 
@@ -894,9 +639,6 @@ class AIAssistant:
             return []
 
     def try_fix_json(self, response: str):
-        """
-        尝试修复JSON格式
-        """
         try:
             start = response.find('[')
             end = response.rfind(']')
@@ -926,9 +668,6 @@ class AIAssistant:
         return None
 
     def clean_ai_response(self, response: str) -> str:
-        """
-        清理AI响应，提取JSON部分
-        """
         if not response:
             return ""
 
@@ -950,9 +689,6 @@ class AIAssistant:
         return ""
 
     def post_process_questions(self, questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        后处理题目列表
-        """
         if not questions:
             return []
 
@@ -973,9 +709,6 @@ class AIAssistant:
         return unique_questions
 
     def is_complete_question(self, question: Dict[str, Any]) -> bool:
-        """
-        检查题目是否完整
-        """
         required_fields = ['type', 'category', 'question', 'answer']
 
         for field in required_fields:
@@ -993,9 +726,6 @@ class AIAssistant:
         return True
 
     def deduplicate_questions(self, questions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        题目去重
-        """
         unique_questions = []
         seen_fingerprints = set()
 
@@ -1009,18 +739,12 @@ class AIAssistant:
         return unique_questions
 
     def create_question_fingerprint(self, question_text: str) -> str:
-        """
-        创建题目的指纹用于去重
-        """
         text = question_text.lower().strip()
         text = re.sub(r'[^\w\u4e00-\u9fff]', '', text)
         text_hash = hashlib.md5(text[:100].encode()).hexdigest()
         return text_hash
 
     def get_file_hash(self, file_path: str) -> str:
-        """
-        获取文件哈希值用于缓存
-        """
         try:
             with open(file_path, 'rb') as f:
                 file_content = f.read()
@@ -1033,7 +757,6 @@ class AIAssistant:
                 return hashlib.md5(file_path.encode()).hexdigest()
 
     def print_library_status(self):
-        """打印题目库状态"""
         index_file = os.path.join(self.questions_dir, "library_index.json")
         if os.path.exists(index_file):
             with open(index_file, 'r', encoding='utf-8') as f:
@@ -1052,14 +775,10 @@ class AIAssistant:
         else:
             print("题目库索引文件不存在")
 
-    # ==================== 兼容接口方法 ====================
-
     def extract_multiple_questions_from_image(self, image_path: str) -> List[Dict[str, Any]]:
-        """从图片中提取多个题目"""
         return self.process_large_file_and_extract_questions(image_path, 'image', max_chunk_size=800)
 
     def extract_multiple_questions_from_text(self, text: str) -> List[Dict[str, Any]]:
-        """从文本中提取多个题目"""
         with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', suffix='.txt', delete=False) as f:
             f.write(text)
             temp_path = f.name
@@ -1073,23 +792,12 @@ class AIAssistant:
                 pass
 
     def extract_multiple_questions_from_pdf(self, pdf_path: str) -> List[Dict[str, Any]]:
-        """从PDF中提取多个题目"""
         return self.process_large_file_and_extract_questions(pdf_path, 'pdf', max_chunk_size=800)
 
     def extract_multiple_questions_from_document(self, document_path: str) -> List[Dict[str, Any]]:
-        """从Office文档中提取多个题目（目前仅支持文本提取）"""
-        # 暂时只支持文本提取，可以通过扩展支持Office文档
         return self.process_large_file_and_extract_questions(document_path, 'file', max_chunk_size=800)
 
     def chat_with_question(self, question, user_query):
-        """
-        基于题目进行AI对话
-        Args:
-            question: 原始题目内容
-            user_query: 用户询问的问题
-        Returns:
-            str: AI的回答
-        """
         try:
             prompt = f"""你是一个学习助手，请根据以下题目帮助解答用户的问题。
 
@@ -1115,7 +823,4 @@ class AIAssistant:
             return f"抱歉，处理您的请求时出现错误：{str(e)}"
 
     def call_api(self, prompt: str) -> str:
-        """
-        简单的API调用方法（兼容原有接口）
-        """
         return self.call_ai_api(prompt)

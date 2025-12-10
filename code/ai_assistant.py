@@ -447,160 +447,10 @@ class AIAssistant:
 
         print(f"内容长度: {len(content)} 字符，最大块大小: {max_chunk_size} 字符")
 
-        chunks_by_question = self._split_by_question_patterns(content, max_chunk_size)
-        if len(chunks_by_question) > 1:
-            print(f"按题目模式分割成 {len(chunks_by_question)} 个块")
-            return chunks_by_question
-
-        chunks_by_paragraph = self._split_by_paragraphs(content, max_chunk_size)
-        if len(chunks_by_paragraph) > 1:
-            print(f"按段落分割成 {len(chunks_by_paragraph)} 个块")
-            return chunks_by_paragraph
-
-        chunks_by_sentence = self._split_by_sentences(content, max_chunk_size)
-        if len(chunks_by_sentence) > 1:
-            print(f"按句子分割成 {len(chunks_by_sentence)} 个块")
-            return chunks_by_sentence
-
         chunks_fixed = self._split_fixed_length(content, max_chunk_size)
         print(f"按固定长度分割成 {len(chunks_fixed)} 个块")
         return chunks_fixed
 
-    def _split_by_question_patterns(self, content: str, max_chunk_size: int) -> List[str]:
-        """
-        按题目编号模式分割
-        """
-        patterns = [
-            r'(?<=\n)\d+[\.、\)）]\s',
-            r'(?<=\n)[一二三四五六七八九十]+[\.、\)）]\s',
-            r'(?<=\n)第\s*\d+\s*题[\.、:：]?\s',
-            r'(?<=\n)Question\s*\d+[\.:]\s',
-            r'(?<=\n)【题目\d+】',
-        ]
-
-        for pattern in patterns:
-            parts = re.split(pattern, content)
-            if len(parts) > 1:
-                chunks = []
-                current_chunk = parts[0] if parts[0].strip() else ""
-
-                for i in range(1, len(parts), 2):
-                    if i + 1 < len(parts):
-                        question_number = parts[i]
-                        question_content = parts[i + 1]
-
-                        if current_chunk:
-                            chunk_with_question = current_chunk + "\n" + question_number + question_content
-                            if len(chunk_with_question) <= max_chunk_size:
-                                chunks.append(chunk_with_question)
-                                current_chunk = ""
-                            else:
-                                if current_chunk:
-                                    chunks.append(current_chunk)
-                                chunks.append(question_number + question_content)
-                                current_chunk = ""
-                        else:
-                            current_chunk = question_number + question_content
-
-                if current_chunk:
-                    chunks.append(current_chunk)
-
-                final_chunks = []
-                for chunk in chunks:
-                    if len(chunk) > max_chunk_size:
-                        sub_chunks = self._split_by_sentences(chunk, max_chunk_size)
-                        final_chunks.extend(sub_chunks)
-                    else:
-                        final_chunks.append(chunk)
-
-                if len(final_chunks) > 1:
-                    return final_chunks
-
-        return [content]
-
-    def _split_by_paragraphs(self, content: str, max_chunk_size: int) -> List[str]:
-        """按段落分割"""
-        paragraphs = re.split(r'\n\s*\n', content)
-        chunks = []
-        current_chunk = ""
-
-        for paragraph in paragraphs:
-            paragraph = paragraph.strip()
-            if not paragraph:
-                continue
-
-            if len(paragraph) > max_chunk_size:
-                paragraph_chunks = self._split_by_sentences(paragraph, max_chunk_size)
-                for p_chunk in paragraph_chunks:
-                    if len(current_chunk) + len(p_chunk) + 2 <= max_chunk_size:
-                        if current_chunk:
-                            current_chunk += "\n\n" + p_chunk
-                        else:
-                            current_chunk = p_chunk
-                    else:
-                        if current_chunk:
-                            chunks.append(current_chunk)
-                        current_chunk = p_chunk
-            else:
-                if len(current_chunk) + len(paragraph) + 2 <= max_chunk_size:
-                    if current_chunk:
-                        current_chunk += "\n\n" + paragraph
-                    else:
-                        current_chunk = paragraph
-                else:
-                    if current_chunk:
-                        chunks.append(current_chunk)
-                    current_chunk = paragraph
-
-        if current_chunk:
-            chunks.append(current_chunk)
-
-        return chunks if len(chunks) > 0 else [content]
-
-    def _split_by_sentences(self, content: str, max_chunk_size: int) -> List[str]:
-        """按句子分割"""
-        sentence_endings = r'(?<=[。！？.!?])\s+'
-        sentences = re.split(sentence_endings, content)
-
-        chunks = []
-        current_chunk = ""
-
-        for sentence in sentences:
-            sentence = sentence.strip()
-            if not sentence:
-                continue
-
-            if len(sentence) > max_chunk_size:
-                sub_parts = re.split(r'[，,;；:]', sentence)
-                for part in sub_parts:
-                    part = part.strip()
-                    if not part:
-                        continue
-
-                    if len(current_chunk) + len(part) + 1 <= max_chunk_size:
-                        if current_chunk:
-                            current_chunk += " " + part
-                        else:
-                            current_chunk = part
-                    else:
-                        if current_chunk:
-                            chunks.append(current_chunk)
-                        current_chunk = part
-            else:
-                if len(current_chunk) + len(sentence) + 1 <= max_chunk_size:
-                    if current_chunk:
-                        current_chunk += " " + sentence
-                    else:
-                        current_chunk = sentence
-                else:
-                    if current_chunk:
-                        chunks.append(current_chunk)
-                    current_chunk = sentence
-
-        if current_chunk:
-            chunks.append(current_chunk)
-
-        return chunks if len(chunks) > 0 else [content]
 
     def _split_fixed_length(self, content: str, max_chunk_size: int) -> List[str]:
         """固定长度分割，但尽量在合理位置分割"""
@@ -707,7 +557,7 @@ class AIAssistant:
    - answer: 参考答案或解题思路
    - difficulty: 难度等级（1-100）
 
-4. 如果题目有选项，请包含在question字段中，如果题目本身有答案，要从question中删除，放入answer
+4. 如果题目有选项，请包含在question字段中，如果题目本身有答案，要从question中删除，放入answer,并且在questin被挖掉的地方用下划线替代，
 5. 如果文本中没有题目，返回空数组[]
 6. 由于要用于app呈现，对于一个问题除题目与选项、选项与选项之间必须有换行符，其余必须均删除，请你做出相应修改
 7. 如果是可以背记的知识点，可以放入question,answer填略

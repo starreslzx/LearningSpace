@@ -1121,75 +1121,6 @@ class AIChatScreen(Screen):
         content.add_widget(ok_btn)
         popup.open()
 
-    def get_ai_response_improved(self, user_message, question_context):
-        try:
-            if hasattr(self, 'thinking_bubble') and self.thinking_bubble in self.chat_layout.children:
-                self.chat_layout.remove_widget(self.thinking_bubble)
-
-            full_prompt = ""
-            if question_context:
-                full_prompt = f"""
-题目内容：
-{question_context}
-
-用户的具体问题：
-{user_message}
-
-请直接针对以上题目和用户的具体问题，提供详细的解答和解释。请用清晰、易懂的语言回答，不要使用JSON格式，直接给出文本回答。
-"""
-            else:
-                full_prompt = f"请直接回答以下问题：{user_message}。不要使用JSON格式。"
-
-            response = ""
-            try:
-                if hasattr(self.ai_assistant, 'chat'):
-                    response = self.ai_assistant.chat(full_prompt)
-                elif hasattr(self.ai_assistant, 'get_response'):
-                    response = self.ai_assistant.get_response(full_prompt)
-                else:
-                    response = self._get_simulated_response(question_context, user_message)
-
-            except Exception as api_error:
-                print(f"AI调用失败: {api_error}")
-                response = self._get_fallback_response(question_context, user_message)
-
-            response = self._clean_and_format_response(response)
-
-            self.add_message("ai", response)
-
-        except Exception as e:
-            print(f"获取AI回复时出错: {e}")
-            import traceback
-            traceback.print_exc()
-            error_response = "抱歉，我暂时无法处理这个问题。请尝试重新提问。"
-            self.add_message("ai", error_response)
-
-    def _clean_and_format_response(self, response):
-        if not response:
-            return "抱歉，我无法生成回复。"
-
-        import json
-        try:
-            data = json.loads(response)
-
-            if isinstance(data, dict):
-                text_fields = ['answer', 'response', 'content', 'text', 'message', 'explanation']
-                for field in text_fields:
-                    if field in data and data[field]:
-                        return str(data[field])
-
-                return "\n".join([f"{k}: {v}" for k, v in data.items() if v])
-            elif isinstance(data, list):
-                return "\n".join(str(item) for item in data)
-            else:
-                return str(data)
-        except (json.JSONDecodeError, TypeError):
-            pass
-
-        response = self.clean_ai_response(response)
-
-        return response
-
     def _get_simulated_response(self, question_context, user_message):
         if question_context:
             return f"""
@@ -1539,8 +1470,7 @@ class AIChatScreen(Screen):
 
 用户的具体问题：
 {user_message}
-
-请直接针对以上题目和用户的具体问题，提供详细的解答和解释。请避免使用"我已收到您的问题"这样的开场白，直接开始解答。
+请根据用户的具体问题回答，如果是无关问题请引导用户用户到题目上来，无法回答请表达你的抱歉，正常对话，不要用json格式
 """
 
                 try:
@@ -1592,8 +1522,6 @@ class AIChatScreen(Screen):
             else:
                 response = f"关于您的问题：{user_message}\n\n我建议您提供更多上下文信息，这样我能更好地为您解答。"
 
-            response = self.clean_ai_response(response)
-
             self.add_message("ai", response)
 
         except Exception as e:
@@ -1603,41 +1531,6 @@ class AIChatScreen(Screen):
             self.add_message("ai",
                              f"我尝试为您解答这个问题，但遇到了一些困难。\n\n请尝试重新表述您的问题，或者检查网络连接。")
 
-    def clean_ai_response(self, response):
-        if not response:
-            return "抱歉，我无法生成回复。请尝试重新提问。"
-
-        if not isinstance(response, str):
-            response = str(response)
-
-        unwanted_prefixes = [
-            "我已收到您的问题",
-            "关于您的问题",
-            "感谢您的提问",
-            "你好",
-            "您好",
-            "作为AI助手",
-            "作为一名AI"
-        ]
-
-        for prefix in unwanted_prefixes:
-            if response.startswith(prefix):
-                for i in range(len(prefix), len(response)):
-                    if response[i] in "，。：:;；\n":
-                        return response[i + 1:].strip()
-
-        json_indicators = ['{', '}', '[', ']', '"response"', '"answer"', '"content"']
-        for indicator in json_indicators:
-            if indicator in response and len(response) < 500:
-                lines = response.split('\n')
-                clean_lines = []
-                for line in lines:
-                    if any(ind in line for ind in ['{', '}', '[', ']', '"', ':']) and '"' in line and ':' in line:
-                        continue
-                    clean_lines.append(line)
-                response = '\n'.join(clean_lines)
-
-        return response.strip()
 
     def clear_chat(self, instance):
         self.chat_layout.clear_widgets()

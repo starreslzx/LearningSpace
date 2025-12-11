@@ -8,3 +8,6 @@ cd LearningSpace
 pip install -r requirements.txt
 ## quick start
 python code/main.py
+## note
+You may have trouble getting question from picture 
+because using pytesseract is difficult 

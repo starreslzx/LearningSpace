@@ -9,5 +9,5 @@ pip install -r requirements.txt
 ## quick start
 python code/main.py
 ## note
-You may have trouble getting question from picture 
-because using pytesseract is difficult 
+If you want to experience extracting question from picture,
+you need to download pytesseract and change the path accordingly

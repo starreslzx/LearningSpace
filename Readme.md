@@ -4,7 +4,8 @@
 git clone https://github.com/starreslzx/LearningSpace.git
 cd LearningSpace
 ## Create environment
-conda create --name LearningSpace python=9.12 
+conda create --name LearningSpace python=9.12
+
 conda activate LearningSpace
 ## Install Package
 pip install -r requirements.txt
